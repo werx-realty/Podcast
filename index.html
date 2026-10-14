@@ -841,7 +841,7 @@ details.fold>summary small{font:600 13px var(--body);color:var(--mute);letter-sp
 /* ================= config ================= */
 const SB_URL='https://rmetotupdjwlbmhzkltg.supabase.co';
 const SB_KEY='sb_publishable_bfhoV2BpwGhtV25986ofcw_HRqHxGEt';
-const ICE=[{urls:['stun:stun.l.google.com:19302','stun:stun1.l.google.com:19302','stun:stun.cloudflare.com:3478']}];
+let ICE=[{urls:['stun:stun.l.google.com:19302','stun:stun1.l.google.com:19302','stun:stun.cloudflare.com:3478']}];
 
 /* ================= icons ================= */
 const IC={
@@ -994,11 +994,12 @@ async function enterRoom({host,room,title,name}){
  addTile('me',R.local,name,'cam',{mine:true});
  updateDock();setLayout(R.layout);renderPeople();renderLivePane();
  PG.start();
- connectSignal();
+ await loadTurn();connectSignal();
  R.tick=setInterval(roomTick,300);syncLogoImg();renderLogoOverlay();
  if(host&&S.phone.pin)phoneConnect();renderPhoneBtn();
  window.addEventListener('resize',positionTiles);
  if(host)LS.set('nextRoom','');}
+async function loadTurn(){try{const c=new AbortController();setTimeout(()=>c.abort(),4000);const j=await (await fetch(SB_URL+'/functions/v1/hubze-pod-turn?room='+encodeURIComponent(R.room),{signal:c.signal})).json();if(j.ice&&j.ice.length)ICE=[ICE[0],...j.ice]}catch(e){console.warn('turn',e)}}
 function connectSignal(){try{if(!window.supabase)throw new Error('Connection library did not load');
  if(!window._sb)window._sb=supabase.createClient(SB_URL,SB_KEY,{realtime:{params:{eventsPerSecond:30}}});
  R.ch=window._sb.channel('hubze-pod-'+R.room,{config:{broadcast:{self:false,ack:false}}});
@@ -1017,7 +1018,7 @@ function makePeer(id,name){
  pc.onicecandidate=e=>{if(e.candidate)send('sig',{to:id,cand:e.candidate.toJSON()})};
  pc.ontrack=e=>{const s=e.streams[0]||new MediaStream([e.track]);let t=R.tiles.get(s.id);
    if(!t){const isScr=p.meta.screen===s.id,isPh=p.meta.phone===s.id;t=addTile(s.id,s,isPh?(p.meta.phoneName||'Phone guest'):isScr?p.name+"'s screen":p.name,isScr?'screen':'cam',{peer:id,phone:isPh})}
-   else if(!t.stream.getTracks().includes(e.track)){}
+   else{t.video.srcObject=null;t.video.srcObject=s;t.video.play().catch(()=>{})}
    if(e.track.kind==='audio')hookAudio(t,e.track);
    s.onremovetrack=()=>{if(!s.getTracks().length)removeTile(s.id)};
    e.track.onended=()=>{if(!s.getTracks().some(x=>x.readyState==='live'))removeTile(s.id)};
@@ -1058,6 +1059,7 @@ function addTile(key,stream,label,kind,{mine=false,peer=null,muted=false,phone=f
  if(mine&&stream.getAudioTracks().length){t.stopMeter=makeMeter(stream,l=>t.level=l)}
  if(R.rec)setTimeout(()=>recTile(t),mine?0:1500);
  positionTiles();renderPeople();return t}
+document.addEventListener('click',()=>{if(!R.on)return;R.tiles.forEach(t=>{if(!t.mine&&t.video.paused)t.video.play().catch(()=>{})});if(_ac&&_ac.state==='suspended')_ac.resume()});
 function hookAudio(t,track){if(t.audioHooked)return;t.audioHooked=true;try{const c=ac();const ms=new MediaStream([track]);const src=c.createMediaStreamSource(ms);src.connect(R.mix);t.mixSrc=src;t.stopMeter=makeMeter(ms,l=>t.level=l)}catch(e){console.warn(e)}}
 function removeTile(key){const t=R.tiles.get(key);if(!t)return;if(t.stopMeter)t.stopMeter();try{t.mixSrc&&t.mixSrc.disconnect()}catch(e){}if(t.rec&&t.rec.state!=='inactive')try{t.rec.stop()}catch(e){}t.el.remove();R.tiles.delete(key);if(R.pin===key)R.pin=null;if(t.kind==='screen'&&R.layout==='screen'&&![...R.tiles.values()].some(x=>x.kind==='screen'))setLayout('side');positionTiles();renderPeople()}
 function tileOrder(){const a=[...R.tiles.values()];return[...a.filter(t=>t.kind==='cam'&&t.mine),...a.filter(t=>t.kind==='cam'&&!t.mine),...a.filter(t=>t.kind==='screen')]}
@@ -1133,7 +1135,7 @@ function showSideTab(t){$$('#sideTabs button').forEach(b=>b.classList.toggle('on
 
 /* ================= program feed (what gets recorded as a whole and streamed) ================= */
 const PG={land:document.createElement('canvas'),vert:document.createElement('canvas'),timer:0,
- start(){if(this.timer)return;this.land.width=1920;this.land.height=1080;this.vert.width=1080;this.vert.height=1920;const h=$('#hiddenMedia');[this.land,this.vert].forEach(c=>{if(!c.isConnected)h.appendChild(c)});this.lx=this.land.getContext('2d');this.vx=this.vert.getContext('2d');this.timer=setInterval(()=>{this.draw(this.lx,1920,1080);this.draw(this.vx,1080,1920)},1000/30)},
+ start(){if(this.timer)return;this.land.width=1920;this.land.height=1080;this.vert.width=1080;this.vert.height=1920;const h=$('#hiddenMedia');[this.land,this.vert].forEach(c=>{if(!c.isConnected)h.appendChild(c)});this.lx=this.land.getContext('2d');this.vx=this.vert.getContext('2d');this.timer=setInterval(()=>{if(!(R.rec||R.live))return;this.draw(this.lx,1920,1080);this.draw(this.vx,1080,1920)},1000/30)},
  stop(){clearInterval(this.timer);this.timer=0},
  canvas(v){return v?this.vert:this.land},
  draw(x,W,H){x.fillStyle=S.work;x.fillRect(0,0,W,H);
