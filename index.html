@@ -318,6 +318,13 @@ details.fold>summary small{font:600 13px var(--body);color:var(--mute);letter-sp
 .dial button{min-height:52px;border-radius:12px;border:1px solid var(--line);background:var(--panel-2);font:700 20px var(--mono);cursor:pointer}
 .dial button:hover{background:var(--panel-3)}
 .tile.phone .ava span{background:var(--panel-3)}
+/* ---------- names & logo ---------- */
+.logo-ov{position:absolute;z-index:5;cursor:grab;touch-action:none;outline:2px dashed transparent;border-radius:6px}
+.logo-ov:hover{outline-color:var(--accent)}
+.logo-ov img{width:100%;height:100%;display:block;object-fit:contain;pointer-events:none}
+.logo-ov.fill img{object-fit:cover}
+.stage.no-names .tile .nm{display:none}
+.nm-row{display:grid;grid-template-columns:minmax(0,1fr);gap:6px}
 /* ---------- modal + toast ---------- */
 .modal{position:fixed;inset:0;z-index:80;background:rgba(5,7,11,.62);display:grid;place-items:center;padding:20px;backdrop-filter:blur(4px)}
 .modal-box{width:min(620px,100%);max-height:92vh;overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:22px;padding:26px;display:flex;flex-direction:column;gap:18px;box-shadow:0 40px 100px -30px rgba(0,0,0,.7)}
@@ -698,6 +705,7 @@ details.fold>summary small{font:600 13px var(--body);color:var(--mute);letter-sp
       <button data-l="spotlight"><i data-ico="spot"></i> Spotlight</button>
       <button data-l="screen"><i data-ico="screen"></i> Screen</button>
     </div>
+    <button class="btn sm" id="brandBtn"><i data-ico="image"></i> Names &amp; logo</button>
     <button class="btn sm icon ghost" id="sideTog" title="Side panel"><i data-ico="panel"></i></button>
   </div>
   <div class="room-body" id="roomBody">
@@ -776,8 +784,7 @@ details.fold>summary small{font:600 13px var(--body);color:var(--mute);letter-sp
       <label class="field"><span>Guest email</span><input class="in" id="ivEmail" type="email" placeholder="maria@email.com"></label>
     </div>
     <div class="row">
-      <button class="btn primary" id="ivGmail" style="flex:1"><i data-ico="mail"></i> Send with Gmail</button>
-      <button class="btn" id="ivMail"><i data-ico="mail"></i> Mail app</button>
+      <button class="btn primary big" id="ivSend" style="flex:1"><i data-ico="mail"></i> Send invite</button>
       <button class="btn" id="ivCopy"><i data-ico="copy"></i> Copy invite</button>
     </div>
     <div class="field"><span>Invite link</span><div class="code" id="ivLink"></div></div>
@@ -917,7 +924,7 @@ const DEF={theme:'dark',work:'#0B0E14',name:'',liveFrame:'vertical',capLang:'en-
  show:{title:'HUBZE Podcast',author:'',email:'',desc:'',category:'Business',lang:'en',explicit:false,cover:'',coverFit:false,coverUrl:'',accent:'#4F8CFF',site:''},
  av:{q:'1080',ns:true,ec:true,cam:'',mic:''},
  dest:{tiktok:{on:true,url:'',key:''},instagram:{on:true,url:'',key:''},youtube:{on:false,url:'rtmp://a.rtmp.youtube.com/live2',key:''},facebook:{on:false,url:'rtmps://live-api-s.facebook.com:443/rtmp/',key:''},custom:{on:false,url:'',key:''}},
- phone:{pin:'',from:'',callIn:''},dirs:{},money:{on:false,title:'Support the show',msg:'If the show helps you, a small monthly gift keeps new episodes coming.',t1:'$3',t2:'$5',t3:'$10',link:'',sponsor:''},invites:{}};
+ phone:{pin:'',from:'',callIn:''},brand:{names:true,logo:'',x:0.03,y:0.04,w:0.14,fit:true},dirs:{},money:{on:false,title:'Support the show',msg:'If the show helps you, a small monthly gift keeps new episodes coming.',t1:'$3',t2:'$5',t3:'$10',link:'',sponsor:''},invites:{}};
 function merge(a,b){for(const k in b){if(b[k]&&typeof b[k]==='object'&&!Array.isArray(b[k])&&a[k]&&typeof a[k]==='object')merge(a[k],b[k]);else a[k]=b[k]}return a}
 const S=merge(JSON.parse(JSON.stringify(DEF)),LS.get('settings',{}));
 let saveT;function saveS(){clearTimeout(saveT);saveT=setTimeout(()=>LS.set('settings',S),250)}
@@ -988,7 +995,7 @@ async function enterRoom({host,room,title,name}){
  updateDock();setLayout(R.layout);renderPeople();renderLivePane();
  PG.start();
  connectSignal();
- R.tick=setInterval(roomTick,300);
+ R.tick=setInterval(roomTick,300);syncLogoImg();renderLogoOverlay();
  if(host&&S.phone.pin)phoneConnect();renderPhoneBtn();
  window.addEventListener('resize',positionTiles);
  if(host)LS.set('nextRoom','');}
@@ -1073,7 +1080,7 @@ function layoutRects(items,mode,W,H,focusKey){
 function positionTiles(){if(!R.on)return;const area=$('#stageArea');const st=$('#stage');const ar=stageAspect();const aw=area.clientWidth-44,ah=area.clientHeight-44;let w=aw,h=w/ar;if(h>ah){h=ah;w=h*ar}w=Math.max(160,Math.floor(w));h=Math.max(90,Math.floor(h));st.style.width=w+'px';st.style.height=h+'px';
  const mode=effLayout();st.classList.toggle('flush',mode==='stacked');st.style.borderRadius=mode==='stacked'?'14px':'18px';
  const items=tileOrder();const rects=layoutRects(items,mode,w,h,R.pin||R.speaking);items.forEach((t,i)=>{const r=rects[i];if(!r)return;Object.assign(t.el.style,{left:r.x+'px',top:r.y+'px',width:r.w+'px',height:r.h+'px'})});
- const cb=$('#capBar');cb.classList.toggle('seam',mode==='stacked'&&items.length===2)}
+ const cb=$('#capBar');cb.classList.toggle('seam',mode==='stacked'&&items.length===2);placeLogo()}
 function setLayout(l){R.layout=l;$$('#roomLayout button').forEach(b=>b.classList.toggle('on',b.dataset.l===l));positionTiles()}
 
 /* tick: levels, active speaker, timer */
@@ -1132,7 +1139,8 @@ const PG={land:document.createElement('canvas'),vert:document.createElement('can
  draw(x,W,H){x.fillStyle=S.work;x.fillRect(0,0,W,H);
   let mode=effLayout();if(W>=H&&mode==='stacked')mode='side';if(W<H&&mode==='side')mode='stacked';
   const items=tileOrder();const rects=layoutRects(items,mode,W,H,R.pin||R.speaking);const flush=mode==='stacked';
-  items.forEach((t,i)=>{const r=rects[i];if(!r)return;drawMedia(x,t.video,r,(t.kind==='screen'||t.fit)?'contain':'cover',flush?0:Math.min(W,H)*0.016,false,(t.phone||t.camOff||!t.stream.getVideoTracks().length)?t.label:null);if(t.kind==='cam')nameTag(x,r,t.label,W,H)});
+  items.forEach((t,i)=>{const r=rects[i];if(!r)return;drawMedia(x,t.video,r,(t.kind==='screen'||t.fit)?'contain':'cover',flush?0:Math.min(W,H)*0.016,false,(t.phone||t.camOff||!t.stream.getVideoTracks().length)?t.label:null);if(t.kind==='cam'&&S.brand.names)nameTag(x,r,t.label,W,H)});
+  drawLogo(x,W,H);
   const lc=R.lastCap;if(lc&&Date.now()-lc.at<4000)drawCaption(x,W,H,lc.text,flush&&items.length===2?'middle':'bottom',1)}};
 function drawMedia(x,el,r,mode,rad,mirror,avatarName){x.save();x.beginPath();if(x.roundRect&&rad)x.roundRect(r.x,r.y,r.w,r.h,rad);else x.rect(r.x,r.y,r.w,r.h);x.clip();x.fillStyle='#141821';x.fillRect(r.x,r.y,r.w,r.h);
  const vw=el&&el.videoWidth,vh=el&&el.videoHeight;
@@ -1226,6 +1234,39 @@ function wireCall(call,label){PH.call=call;PH.label='Phone · '+label;renderPhon
 function phoneHang(){if(PH.call)try{PH.call.disconnect()}catch(e){}}
 function renderPhoneBtn(){const b=$('#dPhone');if(!b)return;b.classList.toggle('act',!!PH.call);b.innerHTML=ico('phone')+(PH.call?'On call':'Phone')}
 
+/* ================= names & logo ================= */
+const LOGO=new Image();let logoSrc='';
+function syncLogoImg(){if(S.brand.logo!==logoSrc){logoSrc=S.brand.logo;LOGO.src=logoSrc||''}}
+function drawLogo(x,W,H){const b=S.brand;if(!b.logo||!LOGO.complete||!LOGO.naturalWidth)return;const w=b.w*W;const ar=LOGO.naturalWidth/LOGO.naturalHeight;const h=b.fit?w/ar:w;const px=b.x*W,py=b.y*H;
+ if(b.fit)x.drawImage(LOGO,px,py,w,h);else{let sx=0,sy=0,sw=LOGO.naturalWidth,sh=LOGO.naturalHeight;if(ar>1){sw=sh;sx=(LOGO.naturalWidth-sw)/2}else{sh=sw;sy=(LOGO.naturalHeight-sh)/2}x.drawImage(LOGO,sx,sy,sw,sh,px,py,w,h)}}
+function renderLogoOverlay(){const st=$('#stage');if(!st)return;let el=$('#logoOv');const b=S.brand;st.classList.toggle('no-names',!b.names);
+ if(!b.logo){if(el)el.remove();return}
+ if(!el){el=document.createElement('div');el.id='logoOv';el.className='logo-ov';el.innerHTML='<img alt="Logo">';st.appendChild(el);
+  let drag=null;el.addEventListener('pointerdown',e=>{el.setPointerCapture(e.pointerId);const r=st.getBoundingClientRect(),o=el.getBoundingClientRect();drag={dx:e.clientX-o.left,dy:e.clientY-o.top,r}});
+  el.addEventListener('pointermove',e=>{if(!drag)return;const {r}=drag;S.brand.x=clamp((e.clientX-drag.dx-r.left)/r.width,0,1-S.brand.w);S.brand.y=clamp((e.clientY-drag.dy-r.top)/r.height,0,.95);placeLogo()});
+  el.addEventListener('pointerup',()=>{drag=null;saveS()})}
+ el.querySelector('img').src=b.logo;el.classList.toggle('fill',!b.fit);placeLogo()}
+function placeLogo(){const el=$('#logoOv'),st=$('#stage');if(!el||!st)return;const b=S.brand;const W=st.clientWidth,H=st.clientHeight;const w=b.w*W;const ar=LOGO.naturalWidth&&LOGO.naturalHeight?LOGO.naturalWidth/LOGO.naturalHeight:1;Object.assign(el.style,{left:b.x*W+'px',top:b.y*H+'px',width:w+'px',height:(b.fit?w/ar:w)+'px'})}
+LOGO.onload=()=>placeLogo();
+function openBrand(){let m=$('#mBrand');if(!m){m=document.createElement('div');m.className='modal';m.id='mBrand';document.body.appendChild(m)}const b=S.brand;
+ const cams=[...R.tiles.values()].filter(t=>t.kind==='cam');
+ m.innerHTML=`<div class="modal-box"><header><h2>Names &amp; logo</h2><button class="btn sm icon ghost" data-close>${ico('x')}</button></header>
+  <label class="switch"><input type="checkbox" id="bNames" ${b.names?'checked':''}><i></i> Show name tags in the bottom left</label>
+  <div class="nm-row">${cams.map(t=>`<label class="field"><span>${t.mine?'You':'Guest'}</span><input class="in" data-k="${esc(t.key)}" value="${esc(t.label)}"></label>`).join('')}</div>
+  <div class="field"><span>Logo</span><div class="row"><label class="btn"><i data-ico="upload"></i>${ico('upload')} ${b.logo?'Change logo':'Upload logo'}<input type="file" id="bLogo" accept="image/*" hidden></label>${b.logo?`<button class="btn" id="bFit">${ico('fit')} ${b.fit?'Fill':'Fit'}</button><button class="btn danger" id="bDel">${ico('trash')} Remove</button>`:''}</div></div>
+  ${b.logo?`<div class="range"><div class="lbl"><span>Logo size</span><span id="bWv">${Math.round(b.w*100)}%</span></div><input type="range" id="bW" min="5" max="40" value="${Math.round(b.w*100)}"></div>
+  <div class="field"><span>Corner</span><div class="seg" id="bCorner"><button data-c="tl">Top left</button><button data-c="tr">Top right</button><button data-c="bl">Bottom left</button><button data-c="br">Bottom right</button></div></div>
+  <p class="muted" style="margin:0;font-size:13.5px">Or drag the logo anywhere on the stage. It shows in the recording and the live stream.</p>`:''}</div>`;
+ m.querySelector('label.btn i[data-ico]')?.remove();
+ $('#bNames').onchange=e=>{b.names=e.target.checked;saveS();renderLogoOverlay()};
+ m.querySelectorAll('[data-k]').forEach(inp=>inp.oninput=()=>{const t=R.tiles.get(inp.dataset.k);if(!t)return;t.label=inp.value||t.label;t.el.querySelector('.nm span').textContent=inp.value;renderPeople()});
+ $('#bLogo').onchange=e=>{const f=e.target.files[0];if(!f)return;const rd=new FileReader();rd.onload=()=>{const img=new Image();img.onload=()=>{const c=document.createElement('canvas');const sc=Math.min(1,800/Math.max(img.width,img.height));c.width=img.width*sc;c.height=img.height*sc;c.getContext('2d').drawImage(img,0,0,c.width,c.height);b.logo=c.toDataURL('image/png');saveS();syncLogoImg();renderLogoOverlay();openBrand()};img.src=rd.result};rd.readAsDataURL(f)};
+ const fb=$('#bFit');if(fb)fb.onclick=()=>{b.fit=!b.fit;saveS();renderLogoOverlay();openBrand()};
+ const db_=$('#bDel');if(db_)db_.onclick=()=>{b.logo='';saveS();syncLogoImg();renderLogoOverlay();openBrand()};
+ const w=$('#bW');if(w)w.oninput=()=>{b.w=w.value/100;$('#bWv').textContent=w.value+'%';placeLogo();saveS()};
+ m.querySelectorAll('#bCorner button').forEach(btn=>btn.onclick=()=>{const c=btn.dataset.c,pad=.03;b.x=c[1]==='l'?pad:1-b.w-pad;const st=$('#stage');const ar=LOGO.naturalWidth?LOGO.naturalWidth/LOGO.naturalHeight:1;const hF=(b.fit?b.w/ar:b.w)*(st?st.clientWidth/st.clientHeight:16/9);b.y=c[0]==='t'?pad*1.6:Math.max(0,1-hF-pad*1.6);saveS();placeLogo()});
+ m.hidden=false}
+
 /* ================= leave ================= */
 async function leaveRoom(silent){if(!R.on)return;phoneHang();if(PH.device){try{PH.device.destroy()}catch(e){}PH.device=null}$('#ring').hidden=true;if(R.rec)await stopRecording();if(R.live)stopLive();if(R.guestRec)guestRecState(false);
  if(R.host)send('end');send('bye');R.caps=false;try{SR&&SR.abort()}catch(e){}SR=null;
@@ -1243,10 +1284,12 @@ function inviteText(name){const show=S.show.title||'my podcast';const host=S.nam
  return{subject:`You're invited to ${show}`,body:`Hi ${name||'there'},\n\nYou're invited to join me on ${show}${title?' for "'+title+'"':''}.\n\nJoin here:\n${link}\n\nOpen the link in Chrome on a computer, allow your camera and mic, and wear headphones if you can. No account or download needed.\n\nSee you soon,\n${host}`,link}}
 function logInvite(name,email){const room=curRoom();(S.invites[room]=S.invites[room]||[]);const list=S.invites[room];const ex=list.find(i=>i.email===email&&i.name===name);if(ex)ex.at=Date.now();else list.push({name,email,at:Date.now()});saveS();renderInvites()}
 function renderInvites(){const list=S.invites[curRoom()]||[];$('#ivCount').textContent=list.length?list.length+' sent':'';$('#ivList').innerHTML=list.length?list.slice().reverse().map((i,n)=>`<div class="inv"><div class="av">${esc(initials(i.name||i.email))}</div><div class="meta"><b>${esc(i.name||'Guest')}</b><small>${esc(i.email||'Link copied')} · ${new Date(i.at).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'})}</small></div><button class="btn sm" data-resend="${list.length-1-n}">Resend</button></div>`).join(''):'<p class="muted" style="margin:0">No one invited yet.</p>';
- $$('#ivList [data-resend]').forEach(b=>b.onclick=()=>{const i=list[+b.dataset.resend];sendInvite('gmail',i.name,i.email)})}
+ $$('#ivList [data-resend]').forEach(b=>b.onclick=()=>{const i=list[+b.dataset.resend];sendInvite('send',i.name,i.email)})}
 function sendInvite(via,name,email){name=(name??$('#ivName').value).trim();email=(email??$('#ivEmail').value).trim();const t=inviteText(name);
  if(via==='copy'){copyText(t.body);logInvite(name,email);return}
  if(!email||!/^\S+@\S+\.\S+$/.test(email)){toast('Add the guest\'s email first.','err');$('#ivEmail').focus();return}
+ if(via==='send'){if(!S.phone.pin){toast('Enter your studio PIN in Settings once, then send.','err');return}const btn=$('#ivSend');if(btn)btn.disabled=true;
+  fetch(SB_URL+'/functions/v1/hubze-pod-invite',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({pin:S.phone.pin,to:email,name,host:S.name||R.name||'',show:S.show.title||'',title:R.on?R.title:($('#sessTitle').value||''),link:t.link,replyTo:S.show.email||''})}).then(r=>r.json().then(j=>({ok:r.ok,j}))).then(({ok,j})=>{if(!ok)throw new Error(j.error||'Email failed');logInvite(name,email);toast('Invite sent to '+email);$('#ivName').value='';$('#ivEmail').value=''}).catch(e=>toast(e.message,'err')).finally(()=>{if(btn)btn.disabled=false});return}
  const url=via==='gmail'?`https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(email)}&su=${encodeURIComponent(t.subject)}&body=${encodeURIComponent(t.body)}`:`mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(t.subject)}&body=${encodeURIComponent(t.body)}`;
  const a=document.createElement('a');a.href=url;a.target='_blank';a.rel='noopener';document.body.appendChild(a);a.click();a.remove();logInvite(name,email);toast('Invite opened in '+(via==='gmail'?'Gmail':'your mail app')+'. Press Send there.');$('#ivName').value='';$('#ivEmail').value=''}
 
@@ -1566,6 +1609,7 @@ function wire(){
  $('#dLeave').onclick=e=>{if(R.rec||R.live){confirmInline(e.currentTarget,ico('leave')+'Sure?',()=>leaveRoom())}else leaveRoom()};
  $$('#roomLayout button').forEach(b=>b.onclick=()=>{if(b.dataset.l==='screen'&&![...R.tiles.values()].some(t=>t.kind==='screen')){toast('Share a screen first.');return}if(R.rec&&PG.lock&&((b.dataset.l==='stacked')!==(PG.lock[0]<PG.lock[1]))&&!R.warnedFrame){R.warnedFrame=true;toast('The full-show recording keeps its starting shape. Your separate tracks can be laid out any way in the Editor.')}setLayout(b.dataset.l)});
  $$('#sideTabs button').forEach(b=>b.onclick=()=>showSideTab(b.dataset.t));
+ $('#brandBtn').onclick=openBrand;
  $('#sideTog').onclick=()=>{R.side=!R.side;$('#roomBody').classList.toggle('noside',!R.side);$('.room-side').hidden=!R.side;positionTiles()};
  // phone
  $('#dPhone').onclick=openPhone;$('#phPinGo').onclick=()=>{S.phone.pin=$('#phPin').value.trim();saveS();openPhone()};$('#phPin').onkeydown=e=>{if(e.key==='Enter')$('#phPinGo').click()};
@@ -1573,7 +1617,7 @@ function wire(){
  $('#phCall').onclick=phoneCall;$('#phHang').onclick=phoneHang;$('#phFrom').onchange=e=>{S.phone.from=e.target.value;saveS()};$('#phNum').onkeydown=e=>{if(e.key==='Enter')phoneCall()};
  $('#ringYes').onclick=()=>{const c=PH.incoming;PH.incoming=null;$('#ring').hidden=true;if(!c)return;wireCall(c,c.parameters?.From||'Caller');c.accept()};$('#ringNo').onclick=()=>{const c=PH.incoming;PH.incoming=null;$('#ring').hidden=true;try{c&&c.reject()}catch(e){}};
  // invite modal
- $('#ivGmail').onclick=()=>sendInvite('gmail');$('#ivMail').onclick=()=>sendInvite('mail');$('#ivCopy').onclick=()=>sendInvite('copy');
+ $('#ivSend').onclick=()=>sendInvite('send');$('#ivCopy').onclick=()=>sendInvite('copy');
  $('#ivName').oninput=()=>$('#ivLink').textContent=inviteLink(curRoom(),$('#ivName').value.trim());
  // live
  $$('#liveFrame button,#liveFrame2 button').forEach(b=>b.onclick=()=>{S.liveFrame=b.dataset.v;saveS();segSet('#liveFrame',S.liveFrame);segSet('#liveFrame2',S.liveFrame)});
