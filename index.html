@@ -176,6 +176,20 @@ details.fold>summary small{font:600 13px var(--body);color:var(--mute);letter-sp
 .room-side{border-left:1px solid var(--line);background:var(--panel);display:flex;flex-direction:column;min-height:0}
 .room-side .seg{margin:14px;align-self:stretch}
 .room-side .seg button{flex:1;justify-content:center}
+.solo{position:fixed;inset:0;z-index:60;background:var(--bg);display:flex;flex-direction:column}
+.solo-top{display:flex;align-items:center;gap:12px;padding:14px 18px;border-bottom:1px solid var(--line)}.solo-top b{font-size:18px}
+.solo-body{flex:1;display:grid;grid-template-columns:1fr 320px;min-height:0}
+.solo-stage{position:relative;display:flex;align-items:center;justify-content:center;padding:18px;min-height:0;background:var(--work)}
+.solo-stage canvas{max-width:100%;max-height:100%;aspect-ratio:16/9;border-radius:12px;background:#000;cursor:grab;touch-action:none}
+.solo-empty{position:absolute;left:50%;top:40%;transform:translate(-50%,-50%);color:#fff;opacity:.75;font-size:15px;pointer-events:none;text-align:center}
+.solo-side{border-left:1px solid var(--line);background:var(--panel);padding:18px;display:flex;flex-direction:column;gap:14px;overflow:auto}
+.solo-side label{font-size:13px;color:var(--mute);font-weight:700;display:flex;justify-content:space-between}
+.solo-side input[type=range]{width:100%}.solo-sw{display:flex;gap:8px;flex-wrap:wrap}.solo-sw button{width:30px;height:30px;border-radius:50%;border:2px solid var(--line);cursor:pointer}
+.live-tx{flex:1.4;min-height:0;display:flex;flex-direction:column;border-top:1px solid var(--line);padding:12px 14px 16px}
+.live-tx .lt-h{font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--mute);margin-bottom:10px}
+.lt-body{flex:1;overflow:auto;display:flex;flex-direction:column;gap:10px}
+#sp-people{flex:0 1 auto;max-height:46%}
+body.is-guest #dCaps,body.is-guest #capBar,body.is-guest #sideTabs [data-t="tx"],body.is-guest #liveTx{display:none!important}
 .side-pane{flex:1;overflow:auto;padding:0 14px 20px;display:flex;flex-direction:column;gap:12px}
 .person{display:flex;align-items:center;gap:12px;padding:12px;border-radius:14px;background:var(--panel-2)}
 .person .av{width:42px;height:42px;border-radius:50%;background:var(--accent);color:#fff;display:grid;place-items:center;font:800 16px var(--display);flex:none}
@@ -705,6 +719,7 @@ details.fold>summary small{font:600 13px var(--body);color:var(--mute);letter-sp
       <button data-l="spotlight"><i data-ico="spot"></i> Spotlight</button>
       <button data-l="screen"><i data-ico="screen"></i> Screen</button>
     </div>
+    <button class="btn sm host-only" id="soloBtn"><i data-ico="cam"></i> Solo record</button>
     <button class="btn sm" id="brandBtn"><i data-ico="image"></i> Names &amp; logo</button>
     <button class="btn sm icon ghost" id="sideTog" title="Side panel"><i data-ico="panel"></i></button>
   </div>
@@ -716,6 +731,7 @@ details.fold>summary small{font:600 13px var(--body);color:var(--mute);letter-sp
     <aside class="room-side">
       <div class="seg" id="sideTabs"><button data-t="people" class="on">People</button><button data-t="tx">Transcript</button><button data-t="lv" class="host-only">Live</button></div>
       <div class="side-pane" id="sp-people"></div>
+      <div class="live-tx" id="liveTx"><div class="lt-h">Live transcript</div><div class="lt-body" id="ltBody"><p class="muted" id="ltEmpty" style="margin:0;font-size:13.5px">Turn on Captions to see what everyone says here.</p></div></div>
       <div class="side-pane" id="sp-tx" hidden><div class="empty" id="txEmpty"><i data-ico="cc"></i><b>No captions yet</b><span>Turn on Captions in the bar below.</span></div></div>
       <div class="side-pane" id="sp-lv" hidden></div>
     </aside>
@@ -834,6 +850,22 @@ details.fold>summary small{font:600 13px var(--body);color:var(--mute);letter-sp
 <div class="ring" id="ring" hidden><div class="ri"><i data-ico="phone"></i></div><div><b id="ringWho">Incoming call</b><div class="muted" style="font-size:13.5px">Calling the studio line</div></div><button class="btn primary" id="ringYes"><i data-ico="phone"></i> Answer</button><button class="btn danger" id="ringNo">Decline</button></div>
 
 <div id="toasts" aria-live="polite"></div>
+<div id="solo" class="solo" hidden>
+ <div class="solo-top"><b>Solo recording</b><span class="tag" id="soloTime">Ready</span><span class="spacer"></span><button class="btn sm" id="soloClose">Close</button></div>
+ <div class="solo-body">
+  <div class="solo-stage"><canvas id="soloCv" width="1920" height="1080"></canvas><div class="solo-empty" id="soloEmpty">Pick a screen, window or website tab to show behind you.<br>Drag your camera anywhere. Scroll on it to resize.</div></div>
+  <aside class="solo-side">
+   <button class="btn big" id="soloPick"><i data-ico="screen"></i> Pick screen or website</button>
+   <label>Shape</label><div class="seg" id="soloShape"><button data-v="circle" class="on">Circle</button><button data-v="rounded">Rounded</button><button data-v="square">Square</button></div>
+   <label>Size <span id="soloSizeV"></span></label><input type="range" id="soloSize" min="10" max="80">
+   <label>Border <span id="soloStrokeV"></span></label><input type="range" id="soloStroke" min="0" max="30">
+   <label>Border color</label><div class="solo-sw" id="soloSw"></div><input type="color" id="soloColor">
+   <label style="justify-content:flex-start;gap:8px;color:var(--text)"><input type="checkbox" id="soloShow" checked> Show my camera</label>
+   <button class="btn rec big" id="soloRec"><span class="dot"></span> Record</button>
+   <button class="btn big" id="soloDl" hidden><i data-ico="download"></i> Download video</button>
+  </aside>
+ </div>
+</div>
 <div id="hiddenMedia" aria-hidden="true" style="position:fixed;left:-10000px;top:0;width:4px;height:4px;overflow:hidden;opacity:0;pointer-events:none"></div>
 
 <script>
@@ -1005,7 +1037,7 @@ function connectSignal(){try{if(!window.supabase)throw new Error('Connection lib
  R.ch=window._sb.channel('hubze-pod-'+R.room,{config:{broadcast:{self:false,ack:false}}});
  R.ch.on('broadcast',{event:'m'},({payload})=>onSignal(payload).catch(e=>console.warn('signal',e)));
  R.ch.subscribe(st=>{if(st==='SUBSCRIBED'){send('hello',{host:R.host});sendMeta()}else if(st==='CHANNEL_ERROR'||st==='TIMED_OUT'){toast('Connection to the call server dropped. Guests may not see you. Retrying…','err')}})}catch(e){toast('Could not connect the call: '+e.message,'err')}}
-function sendMeta(){send('meta',{cam:R.local?.id,screen:R.screen?.id||null,phone:PH.stream?.id||null,phoneName:PH.label||'',mic:R.mic,camOn:R.cam,rec:R.host?R.rec:undefined,recStart:R.host&&R.rec?R.recStart:undefined})}
+function sendMeta(){send('meta',{cam:R.local?.id,screen:R.screen?.id||null,phone:PH.stream?.id||null,phoneName:PH.label||'',mic:R.mic,camOn:R.cam,rec:R.host?R.rec:undefined,caps:R.host?!!R.caps:undefined,recStart:R.host&&R.rec?R.recStart:undefined})}
 
 function makePeer(id,name){
  const pc=new RTCPeerConnection({iceServers:ICE,bundlePolicy:'max-bundle'});
@@ -1016,7 +1048,7 @@ function makePeer(id,name){
  if(PH.stream)PH.stream.getAudioTracks().forEach(t=>{p.senders.phone=pc.addTrack(t,PH.stream)});
  pc.onnegotiationneeded=async()=>{try{p.makingOffer=true;await pc.setLocalDescription();send('sig',{to:id,desc:pc.localDescription.toJSON()})}catch(e){console.warn(e)}finally{p.makingOffer=false}};
  pc.onicecandidate=e=>{if(e.candidate)send('sig',{to:id,cand:e.candidate.toJSON()})};
- pc.ontrack=e=>{const s=e.streams[0]||new MediaStream([e.track]);let t=R.tiles.get(s.id);
+ pc.ontrack=e=>{try{e.receiver.jitterBufferTarget=e.track.kind==='video'?0:40}catch(_){}try{if(e.track.kind==='video')e.receiver.playoutDelayHint=0}catch(_){}const s=e.streams[0]||new MediaStream([e.track]);let t=R.tiles.get(s.id);
    if(!t){const isScr=p.meta.screen===s.id,isPh=p.meta.phone===s.id;t=addTile(s.id,s,isPh?(p.meta.phoneName||'Phone guest'):isScr?p.name+"'s screen":p.name,isScr?'screen':'cam',{peer:id,phone:isPh})}
    else{t.video.srcObject=null;t.video.srcObject=s;t.video.play().catch(()=>{})}
    if(e.track.kind==='audio')hookAudio(t,e.track);
@@ -1025,7 +1057,7 @@ function makePeer(id,name){
    if(R.rec)setTimeout(()=>recTile(t),1500);positionTiles()};
  pc.onconnectionstatechange=()=>{const st=pc.connectionState;if(st==='connected'){tuneSenders(p);renderPeople()}if(st==='failed'){try{pc.restartIce()}catch(e){}toast(p.name+"'s connection is struggling.",'err')}if(st==='closed')dropPeer(id)};
  return p}
-async function tuneSenders(p){for(const s of p.pc.getSenders()){if(!s.track||s.track.kind!=='video')continue;try{const prm=s.getParameters();if(!prm.encodings||!prm.encodings.length)prm.encodings=[{}];const isScr=R.screen&&R.screen.getVideoTracks().includes(s.track);prm.encodings[0].maxBitrate=isScr?3500000:2800000;prm.encodings[0].maxFramerate=30;prm.degradationPreference=isScr?'maintain-resolution':'balanced';await s.setParameters(prm)}catch(e){}}}
+async function tuneSenders(p){for(const s of p.pc.getSenders()){if(!s.track||s.track.kind!=='video')continue;try{const prm=s.getParameters();if(!prm.encodings||!prm.encodings.length)prm.encodings=[{}];const isScr=R.screen&&R.screen.getVideoTracks().includes(s.track);prm.encodings[0].maxBitrate=isScr?3500000:4000000;prm.encodings[0].priority='high';prm.encodings[0].networkPriority='high';prm.encodings[0].maxFramerate=30;prm.degradationPreference=isScr?'maintain-resolution':'balanced';await s.setParameters(prm)}catch(e){}}}
 async function onSignal(m){if(!m||m.from===R.me)return;if(m.to&&m.to!==R.me)return;
  const p0=R.peers.get(m.from);if(p0&&m.name)p0.name=m.name;
  switch(m.type){
@@ -1038,6 +1070,7 @@ async function onSignal(m){if(!m||m.from===R.me)return;if(m.to&&m.to!==R.me)retu
   case 'meta':{const p=R.peers.get(m.from);if(!p)return;p.meta=m;
     R.tiles.forEach(t=>{if(t.peer!==m.from)return;if(t.key===m.phone){t.phone=true;t.el.classList.add('phone');t.label=m.phoneName||'Phone guest';t.el.querySelector('.nm span').textContent=t.label;return}const scr=t.key===m.screen;const kind=scr?'screen':'cam';if(t.kind!==kind){t.kind=kind;t.el.classList.toggle('screen',scr);t.el.classList.toggle('cam',!scr);t.label=scr?p.name+"'s screen":p.name;t.el.querySelector('.nm span').textContent=t.label}
       if(!scr){t.micOff=!m.mic;t.camOff=!m.camOn;t.el.querySelector('.ava').hidden=!t.camOff;t.el.querySelector('.nm .mo').hidden=!t.micOff}});
+    if(!R.host&&m.caps!==undefined&&!!m.caps!==!!R.caps)toggleCaps();
     if(!R.host&&m.rec!==undefined)guestRecState(m.rec,m.recStart,m.name);
     if(m.screen&&p.lastScreen!==m.screen)setLayout('screen');p.lastScreen=m.screen;
     renderPeople();positionTiles();break}
@@ -1117,21 +1150,61 @@ function stopScreen(){if(!R.screen)return;const s=R.screen;R.screen=null;R.peers
 
 /* ================= captions (speech to text) ================= */
 let SR=null,capTimer=0;
-function toggleCaps(){if(R.caps){R.caps=false;try{SR&&SR.abort()}catch(e){}SR=null;updateDock();return}
+function toggleCaps(){if(R.caps){R.caps=false;try{SR&&SR.abort()}catch(e){}SR=null;updateDock();if(R.host)sendMeta();return}
  const C=window.SpeechRecognition||window.webkitSpeechRecognition;if(!C){toast('Live captions need Chrome or Edge.','err');return}
  R.caps=true;SR=new C();SR.continuous=true;SR.interimResults=true;SR.lang=S.capLang||'en-US';let ts0=null;
  SR.onresult=e=>{for(let i=e.resultIndex;i<e.results.length;i++){const r=e.results[i];const txt=r[0].transcript.trim();if(!txt)continue;if(ts0==null)ts0=Date.now()-600;const c={who:R.name,text:txt,ts0,ts1:Date.now(),final:r.isFinal,key:R.me};addCaption(c);send('cap',{text:txt,ts0,ts1:c.ts1,final:r.isFinal});if(r.isFinal)ts0=null}};
  SR.onend=()=>{if(R.caps&&R.on&&R.mic){setTimeout(()=>{try{SR&&SR.start()}catch(e){}},250)}};
  SR.onerror=e=>{if(e.error==='not-allowed'||e.error==='service-not-allowed'){R.caps=false;SR=null;toast('Captions were blocked. Allow the microphone for this site.','err');updateDock()}};
- try{SR.start()}catch(e){}updateDock();showSideTab('tx')}
-function addCaption(c){const bar=$('#capBar');$('#capWho').textContent=c.who;$('#capText').textContent=c.text;bar.hidden=false;clearTimeout(capTimer);capTimer=setTimeout(()=>bar.hidden=true,c.final?3500:6000);R.lastCap={...c,at:Date.now()};
- const pane=$('#sp-tx');$('#txEmpty')?.remove();let el=pane.querySelector(`.tx.interim[data-k="${CSS.escape(c.key)}"]`);
+ try{SR.start()}catch(e){}updateDock();if(R.host)sendMeta()}
+function addCaption(c){if(!R.host)return;const bar=$('#capBar');$('#capWho').textContent=c.who;$('#capText').textContent=c.text;bar.hidden=false;clearTimeout(capTimer);capTimer=setTimeout(()=>bar.hidden=true,c.final?3500:6000);R.lastCap={...c,at:Date.now()};
+ $('#txEmpty')?.remove();$('#ltEmpty')?.remove();
  const t=R.rec?fmt((c.ts0-R.recStart)/1000):fmt((c.ts0-R.joinedAt)/1000);
+ [$('#sp-tx'),$('#ltBody')].forEach(pane=>{let el=pane.querySelector(`.tx.interim[data-k="${CSS.escape(c.key)}"]`);
  if(!el){el=document.createElement('div');el.className='tx interim';el.dataset.k=c.key;pane.appendChild(el)}
  el.innerHTML=`<b>${esc(c.who)}<span>${t}</span></b><div>${esc(c.text)}</div>`;
- if(c.final){el.classList.remove('interim');delete el.dataset.k;if(R.rec&&R.host)R.recCaps.push({who:c.who,text:c.text,t0:Math.max(0,(c.ts0-R.recStart)/1000),t1:Math.max(0,(c.ts1-R.recStart)/1000)})}
+ if(c.final){el.classList.remove('interim');delete el.dataset.k}pane.scrollTop=pane.scrollHeight});
+ if(c.final){if(R.rec&&R.host)R.recCaps.push({who:c.who,text:c.text,t0:Math.max(0,(c.ts0-R.recStart)/1000),t1:Math.max(0,(c.ts1-R.recStart)/1000)})}
  pane.scrollTop=pane.scrollHeight}
-function showSideTab(t){$$('#sideTabs button').forEach(b=>b.classList.toggle('on',b.dataset.t===t));['people','tx','lv'].forEach(k=>$('#sp-'+k).hidden=k!==t)}
+const SO={x:.82,y:.74,size:.34,shape:'circle',stroke:6,color:'#3b82f6',show:true};try{Object.assign(SO,JSON.parse(localStorage.getItem('hpod_solo')||'{}'))}catch(e){}
+function soSave(){try{localStorage.setItem('hpod_solo',JSON.stringify({x:SO.x,y:SO.y,size:SO.size,shape:SO.shape,stroke:SO.stroke,color:SO.color,show:SO.show}))}catch(e){}}
+function soVid(stream){const v=document.createElement('video');v.muted=true;v.playsInline=true;v.autoplay=true;v.srcObject=stream;$('#hiddenMedia').appendChild(v);v.play().catch(()=>{});return v}
+async function openSolo(){$('#solo').hidden=false;SO.cv=$('#soloCv');SO.x2=SO.cv.getContext('2d');SO.blob=null;$('#soloDl').hidden=true;$('#soloTime').textContent='Ready';
+ SO.cam=R.local;SO.ownCam=null;if(!SO.cam){try{SO.cam=SO.ownCam=await navigator.mediaDevices.getUserMedia(constraints())}catch(e){toast('Could not open your camera: '+e.message,'err')}}
+ if(SO.cam)SO.camV=soVid(SO.cam);soUI();clearInterval(SO.timer);SO.timer=setInterval(soDraw,1000/30)}
+function soUI(){$('#soloSize').value=Math.round(SO.size*100);$('#soloSizeV').textContent=Math.round(SO.size*100)+'%';$('#soloStroke').value=SO.stroke;$('#soloStrokeV').textContent=SO.stroke+'px';$('#soloColor').value=SO.color;$('#soloShow').checked=SO.show;$$('#soloShape button').forEach(b=>b.classList.toggle('on',b.dataset.v===SO.shape));$('#soloEmpty').hidden=!!SO.scr}
+function soBox(){const W=1920,H=1080,h=SO.size*H,w=h;const x=Math.min(W-w/2-20,Math.max(w/2+20,SO.x*W)),y=Math.min(H-h/2-20,Math.max(h/2+20,SO.y*H));return{x:x-w/2,y:y-h/2,w,h}}
+function soPath(x,b){x.beginPath();if(SO.shape==='circle')x.arc(b.x+b.w/2,b.y+b.h/2,b.w/2,0,Math.PI*2);else if(SO.shape==='rounded')x.roundRect(b.x,b.y,b.w,b.h,b.w*.18);else x.rect(b.x,b.y,b.w,b.h)}
+function soDraw(){const x=SO.x2,W=1920,H=1080;x.fillStyle=S.work||'#0B0E14';x.fillRect(0,0,W,H);
+ const sv=SO.scrV;if(sv&&sv.videoWidth){const k=Math.min(W/sv.videoWidth,H/sv.videoHeight),dw=sv.videoWidth*k,dh=sv.videoHeight*k;x.drawImage(sv,(W-dw)/2,(H-dh)/2,dw,dh)}
+ const cv=SO.camV;if(SO.show&&cv&&cv.videoWidth){const b=soBox();x.save();soPath(x,b);x.clip();const vw=cv.videoWidth,vh=cv.videoHeight,s=Math.max(b.w/vw,b.h/vh),sw=b.w/s,sh=b.h/s;x.drawImage(cv,(vw-sw)/2,(vh-sh)/2,sw,sh,b.x,b.y,b.w,b.h);x.restore();
+  if(SO.stroke>0){x.save();soPath(x,b);x.lineWidth=SO.stroke*2;x.strokeStyle=SO.color;x.stroke();x.restore()}}
+ if(SO.rec)$('#soloTime').textContent='REC '+fmt((Date.now()-SO.start)/1000)}
+function soPt(e){const r=SO.cv.getBoundingClientRect();return{x:(e.clientX-r.left)*1920/r.width,y:(e.clientY-r.top)*1080/r.height}}
+async function soPick(){try{const st=await navigator.mediaDevices.getDisplayMedia({video:{frameRate:30,width:{ideal:1920},height:{ideal:1080}},audio:true,systemAudio:'include'});
+ if(SO.scr)SO.scr.getTracks().forEach(t=>t.stop());SO.scr=st;const vt=st.getVideoTracks()[0];try{vt.contentHint='detail'}catch(e){}if(SO.scrV)SO.scrV.remove();SO.scrV=soVid(st);
+ vt.onended=()=>{SO.scr=null;SO.scrV?.remove();SO.scrV=null;soUI()};if(SO.dest&&st.getAudioTracks().length){try{ac().createMediaStreamSource(st).connect(SO.dest)}catch(e){}}soUI()}catch(e){if(e.name!=='NotAllowedError')toast('Could not share: '+e.message,'err')}}
+function soRec(){if(SO.rec){SO.rec.stop();return}
+ const c=ac();SO.dest=c.createMediaStreamDestination();[SO.cam,SO.scr].forEach(st=>{if(st&&st.getAudioTracks().length){try{c.createMediaStreamSource(st).connect(SO.dest)}catch(e){}}});
+ const out=new MediaStream([...SO.cv.captureStream(30).getVideoTracks(),...SO.dest.stream.getAudioTracks()]);const mime=pickMime(true);
+ let mr;try{mr=new MediaRecorder(out,{mimeType:mime,videoBitsPerSecond:8000000,audioBitsPerSecond:192000})}catch(e){mr=new MediaRecorder(out)}
+ const ch=[];mr.ondataavailable=e=>{if(e.data.size)ch.push(e.data)};
+ mr.onstop=()=>{SO.rec=null;SO.blob=new Blob(ch,{type:mr.mimeType||mime});SO.ext=(mr.mimeType||mime).includes('mp4')?'mp4':'webm';$('#soloRec').innerHTML='<span class="dot"></span> Record';$('#soloRec').classList.remove('on');$('#soloTime').textContent='Saved';$('#soloDl').hidden=false;soDl()};
+ mr.start(1000);SO.rec=mr;SO.start=Date.now();$('#soloRec').innerHTML='<span class="dot"></span> Stop';$('#soloRec').classList.add('on')}
+function soDl(){if(SO.blob)download(SO.blob,'HUBZE Solo '+new Date().toISOString().slice(0,16).replace('T',' ').replace(':','-')+'.'+SO.ext)}
+function closeSolo(){if(SO.rec){SO.rec.stop()}clearInterval(SO.timer);SO.timer=0;if(SO.scr)SO.scr.getTracks().forEach(t=>t.stop());SO.scr=null;SO.scrV?.remove();SO.scrV=null;SO.camV?.remove();SO.camV=null;if(SO.ownCam)stopStream(SO.ownCam);SO.ownCam=null;$('#solo').hidden=true}
+function soloInit(){const cv=$('#soloCv');
+ cv.onpointerdown=e=>{const p=soPt(e),b=soBox();if(p.x>=b.x&&p.x<=b.x+b.w&&p.y>=b.y&&p.y<=b.y+b.h){SO.drag={dx:p.x-(b.x+b.w/2),dy:p.y-(b.y+b.h/2)};cv.setPointerCapture(e.pointerId);cv.style.cursor='grabbing'}};
+ cv.onpointermove=e=>{if(!SO.drag)return;const p=soPt(e);SO.x=(p.x-SO.drag.dx)/1920;SO.y=(p.y-SO.drag.dy)/1080;const b=soBox();SO.x=(b.x+b.w/2)/1920;SO.y=(b.y+b.h/2)/1080};
+ cv.onpointerup=cv.onpointercancel=()=>{if(SO.drag){SO.drag=null;cv.style.cursor='grab';soSave()}};
+ cv.onwheel=e=>{const p=soPt(e),b=soBox();if(p.x<b.x||p.x>b.x+b.w||p.y<b.y||p.y>b.y+b.h)return;e.preventDefault();SO.size=Math.min(.8,Math.max(.1,SO.size-e.deltaY*.0008));soUI();soSave()};
+ $('#soloSize').oninput=e=>{SO.size=e.target.value/100;soUI();soSave()};$('#soloStroke').oninput=e=>{SO.stroke=+e.target.value;soUI();soSave()};
+ $('#soloColor').oninput=e=>{SO.color=e.target.value;soSave()};$('#soloShow').onchange=e=>{SO.show=e.target.checked;soSave()};
+ $$('#soloShape button').forEach(b=>b.onclick=()=>{SO.shape=b.dataset.v;soUI();soSave()});
+ $('#soloSw').innerHTML=['#ffffff','#000000','#3b82f6','#ef4444','#f59e0b','#a855f7','#ec4899'].map(c=>`<button data-c="${c}" style="background:${c}"></button>`).join('');
+ $$('#soloSw button').forEach(b=>b.onclick=()=>{SO.color=b.dataset.c;soUI();soSave()});
+ $('#soloPick').onclick=soPick;$('#soloRec').onclick=soRec;$('#soloDl').onclick=soDl;$('#soloClose').onclick=closeSolo;$('#soloBtn').onclick=openSolo}
+function showSideTab(t){$$('#sideTabs button').forEach(b=>b.classList.toggle('on',b.dataset.t===t));['people','tx','lv'].forEach(k=>$('#sp-'+k).hidden=k!==t);$('#liveTx').hidden=t!=='people'}
 
 /* ================= program feed (what gets recorded as a whole and streamed) ================= */
 const PG={land:document.createElement('canvas'),vert:document.createElement('canvas'),timer:0,
@@ -1274,7 +1347,7 @@ async function leaveRoom(silent){if(!R.on)return;phoneHang();if(PH.device){try{P
  if(R.host)send('end');send('bye');R.caps=false;try{SR&&SR.abort()}catch(e){}SR=null;
  R.peers.forEach(p=>{try{p.pc.close()}catch(e){}});R.peers.clear();[...R.tiles.keys()].forEach(removeTile);
  if(R.ch){try{await R.ch.unsubscribe()}catch(e){}R.ch=null}
- stopScreen();stopStream(R.local);PV.stream=null;R.local=null;clearInterval(R.tick);PG.stop();R.on=false;$('#room').hidden=true;$('#capBar').hidden=true;$('#sp-tx').innerHTML='<div class="empty" id="txEmpty">'+ico('cc')+'<b>No captions yet</b><span>Turn on Captions in the bar below.</span></div>';
+ stopScreen();stopStream(R.local);PV.stream=null;R.local=null;clearInterval(R.tick);PG.stop();R.on=false;$('#room').hidden=true;$('#capBar').hidden=true;$('#ltBody').innerHTML='<p class="muted" id="ltEmpty" style="margin:0;font-size:13.5px">Turn on Captions to see what everyone says here.</p>';$('#sp-tx').innerHTML='<div class="empty" id="txEmpty">'+ico('cc')+'<b>No captions yet</b><span>Turn on Captions in the bar below.</span></div>';
  if(isGuest){$('#gJoin').hidden=true;$('#gBye').hidden=false;const dl=$('#gByeDl');dl.innerHTML='';(R.guestBlobs||[]).forEach((g,i)=>{const b=document.createElement('button');b.className='btn primary';b.innerHTML=ico('download')+' Download my HD recording'+(i?' '+(i+1):'');b.onclick=()=>download(g.blob,safeName(R.name+'-hd-'+(i+1))+'.'+extOf(g.mime));dl.appendChild(b)});if(R.guestBlobs?.length)$('#gByeMsg').textContent='Send your HD recording to the host for the best quality edit.';return}
  go('studio')}
 window.addEventListener('beforeunload',e=>{if(R.on){send('bye');if(R.rec){e.preventDefault();e.returnValue=''}}});
@@ -1606,7 +1679,7 @@ function wire(){
  $('#startSess').onclick=()=>{const name=$('#myName').value.trim()||'Host';S.name=name;saveS();enterRoom({host:true,room:nextRoomId(),title:$('#sessTitle').value.trim()||'Session '+new Date().toLocaleDateString([],{month:'short',day:'numeric'}),name})};
  $('#lobbyInvite').onclick=openInvite;
  // room
- $('#dMic').onclick=toggleMic;$('#dCam').onclick=toggleCam;$('#dScreen').onclick=toggleScreen;$('#dCaps').onclick=toggleCaps;
+ soloInit();$('#dMic').onclick=toggleMic;$('#dCam').onclick=toggleCam;$('#dScreen').onclick=toggleScreen;$('#dCaps').onclick=toggleCaps;
  $('#dRec').onclick=()=>R.rec?stopRecording():startRecording();$('#dLive').onclick=openLive;$('#dInvite').onclick=openInvite;
  $('#dLeave').onclick=e=>{if(R.rec||R.live){confirmInline(e.currentTarget,ico('leave')+'Sure?',()=>leaveRoom())}else leaveRoom()};
  $$('#roomLayout button').forEach(b=>b.onclick=()=>{if(b.dataset.l==='screen'&&![...R.tiles.values()].some(t=>t.kind==='screen')){toast('Share a screen first.');return}if(R.rec&&PG.lock&&((b.dataset.l==='stacked')!==(PG.lock[0]<PG.lock[1]))&&!R.warnedFrame){R.warnedFrame=true;toast('The full-show recording keeps its starting shape. Your separate tracks can be laid out any way in the Editor.')}setLayout(b.dataset.l)});
