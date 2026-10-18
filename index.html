@@ -1017,7 +1017,7 @@ function inviteLink(room,guest){const u=new URL(location.href);u.hash='';u.searc
 
 async function enterRoom({host,room,title,name}){
  if(!PV.stream){toast('Turn on your camera or mic first.','err');return}
- R.on=true;R.host=host;R.room=room;R.title=title;R.name=name;R.local=PV.stream;R.mic=PV.mic;R.cam=PV.cam;R.joinedAt=Date.now();
+ R.ok=new Set();R.okList=[];R.hostId=null;R.admitted=!!host;R.on=true;R.host=host;R.room=room;R.title=title;R.name=name;R.local=PV.stream;R.mic=PV.mic;R.cam=PV.cam;R.joinedAt=Date.now();
  if(PV.stopMeter){PV.stopMeter();PV.stopMeter=null}
  const c=ac();R.mix=c.createMediaStreamDestination();
  if(R.local.getAudioTracks().length){const s=c.createMediaStreamSource(R.local);s.connect(R.mix);R.localSrc=s}
@@ -1026,7 +1026,7 @@ async function enterRoom({host,room,title,name}){
  addTile('me',R.local,name,'cam',{mine:true});
  updateDock();setLayout(R.layout);renderPeople();renderLivePane();
  PG.start();
- await loadTurn();connectSignal();
+ await loadTurn();connectSignal();showWaiting();
  R.tick=setInterval(roomTick,300);syncLogoImg();renderLogoOverlay();
  if(host&&S.phone.pin)phoneConnect();renderPhoneBtn();
  window.addEventListener('resize',positionTiles);
@@ -1037,7 +1037,7 @@ function connectSignal(){try{if(!window.supabase)throw new Error('Connection lib
  R.ch=window._sb.channel('hubze-pod-'+R.room,{config:{broadcast:{self:false,ack:false}}});
  R.ch.on('broadcast',{event:'m'},({payload})=>onSignal(payload).catch(e=>console.warn('signal',e)));
  R.ch.subscribe(st=>{if(st==='SUBSCRIBED'){send('hello',{host:R.host});sendMeta()}else if(st==='CHANNEL_ERROR'||st==='TIMED_OUT'){toast('Connection to the call server dropped. Guests may not see you. Retrying…','err')}})}catch(e){toast('Could not connect the call: '+e.message,'err')}}
-function sendMeta(){send('meta',{cam:R.local?.id,screen:R.screen?.id||null,phone:PH.stream?.id||null,phoneName:PH.label||'',mic:R.mic,camOn:R.cam,rec:R.host?R.rec:undefined,caps:R.host?!!R.caps:undefined,recStart:R.host&&R.rec?R.recStart:undefined})}
+function sendMeta(){send('meta',{cam:R.local?.id,screen:R.screen?.id||null,phone:PH.stream?.id||null,phoneName:PH.label||'',mic:R.mic,camOn:R.cam,rec:R.host?R.rec:undefined,caps:R.host?!!R.caps:undefined,ok:R.host?[...R.ok]:undefined,recStart:R.host&&R.rec?R.recStart:undefined})}
 
 function makePeer(id,name){
  const pc=new RTCPeerConnection({iceServers:ICE,bundlePolicy:'max-bundle'});
@@ -1061,23 +1061,38 @@ async function tuneSenders(p){for(const s of p.pc.getSenders()){if(!s.track||s.t
 async function onSignal(m){if(!m||m.from===R.me)return;if(m.to&&m.to!==R.me)return;
  const p0=R.peers.get(m.from);if(p0&&m.name)p0.name=m.name;
  switch(m.type){
-  case 'hello':{if(R.peers.size>=5&&!R.peers.has(m.from)){toast('Room is full (up to 6 people).','err');return}if(!R.peers.has(m.from)){makePeer(m.from,m.name);toast(m.name+' joined')}send('hey',{to:m.from});sendMeta();renderPeople();break}
-  case 'hey':{if(!R.peers.has(m.from))makePeer(m.from,m.name);sendMeta();renderPeople();break}
-  case 'sig':{let p=R.peers.get(m.from)||makePeer(m.from,m.name);const pc=p.pc;
+  case 'hello':{
+   if(R.host){if(!R.ok.has(m.from)){askAdmit(m.from,m.name);return}}
+   else if(m.host){R.hostId=m.from;if(!R.admitted){send('hello',{to:m.from});return}}
+   else if(!R.okList.includes(m.from))return;
+   if(R.peers.size>=5&&!R.peers.has(m.from)){toast('Room is full (up to 6 people).','err');return}if(!R.peers.has(m.from)){makePeer(m.from,m.name);toast(m.name+' joined')}send('hey',{to:m.from});sendMeta();renderPeople();break}
+  case 'hey':{if(R.host){if(!R.ok.has(m.from))return}else if(m.host){R.hostId=m.from;admitted()}else if(!R.okList.includes(m.from))return;
+   if(!R.peers.has(m.from))makePeer(m.from,m.name);sendMeta();renderPeople();break}
+  case 'sig':{if(!R.peers.has(m.from)){if(R.host?!R.ok.has(m.from):(m.from!==R.hostId&&!R.okList.includes(m.from)))return}
+   let p=R.peers.get(m.from)||makePeer(m.from,m.name);const pc=p.pc;
     if(m.desc){const collide=m.desc.type==='offer'&&(p.makingOffer||pc.signalingState!=='stable');p.ignoreOffer=!p.polite&&collide;if(p.ignoreOffer)return;
       await pc.setRemoteDescription(m.desc);if(m.desc.type==='offer'){await pc.setLocalDescription();send('sig',{to:m.from,desc:pc.localDescription.toJSON()})}}
     else if(m.cand){try{await pc.addIceCandidate(m.cand)}catch(e){if(!p.ignoreOffer)console.warn(e)}}break}
-  case 'meta':{const p=R.peers.get(m.from);if(!p)return;p.meta=m;
+  case 'meta':{if(!R.host&&m.ok){R.hostId=m.from;R.okList=m.ok;if(m.ok.includes(R.me))admitted();if(R.admitted)m.ok.forEach(id=>{if(id!==R.me&&!R.peers.has(id)){makePeer(id,'Guest');send('hey',{to:id})}})}
+   const p=R.peers.get(m.from);if(!p)return;p.meta=m;
     R.tiles.forEach(t=>{if(t.peer!==m.from)return;if(t.key===m.phone){t.phone=true;t.el.classList.add('phone');t.label=m.phoneName||'Phone guest';t.el.querySelector('.nm span').textContent=t.label;return}const scr=t.key===m.screen;const kind=scr?'screen':'cam';if(t.kind!==kind){t.kind=kind;t.el.classList.toggle('screen',scr);t.el.classList.toggle('cam',!scr);t.label=scr?p.name+"'s screen":p.name;t.el.querySelector('.nm span').textContent=t.label}
       if(!scr){t.micOff=!m.mic;t.camOff=!m.camOn;t.el.querySelector('.ava').hidden=!t.camOff;t.el.querySelector('.nm .mo').hidden=!t.micOff}});
     if(!R.host&&m.caps!==undefined&&!!m.caps!==!!R.caps)toggleCaps();
     if(!R.host&&m.rec!==undefined)guestRecState(m.rec,m.recStart,m.name);
     if(m.screen&&p.lastScreen!==m.screen)setLayout('screen');p.lastScreen=m.screen;
     renderPeople();positionTiles();break}
-  case 'cap':{addCaption({who:m.name,text:m.text,ts0:m.ts0,ts1:m.ts1,final:m.final,key:m.from});break}
-  case 'bye':{dropPeer(m.from);toast(m.name+' left');break}
+  case 'cap':{if(R.host&&!R.ok.has(m.from))return;addCaption({who:m.name,text:m.text,ts0:m.ts0,ts1:m.ts1,final:m.final,key:m.from});break}
+  case 'deny':{if(!R.host){toast('The host did not let you in.','err');leaveRoom(true)}break}
+  case 'bye':{if(R.host){R.ok.delete(m.from);$('#adm-'+CSS.escape(m.from))?.remove()}dropPeer(m.from);toast(m.name+' left');break}
   case 'end':{if(!R.host){toast('The host ended the session.');leaveRoom()}break}
  }}
+function askAdmit(id,name){if($('#adm-'+CSS.escape(id)))return;let box=$('#admitBox');if(!box){box=document.createElement('div');box.id='admitBox';box.style.cssText='position:fixed;right:20px;bottom:110px;z-index:80;display:flex;flex-direction:column;gap:10px';document.body.appendChild(box)}
+ const c=document.createElement('div');c.id='adm-'+id;c.style.cssText='background:var(--panel);border:1px solid var(--accent);border-radius:14px;padding:14px 16px;box-shadow:0 10px 30px rgba(0,0,0,.4);display:flex;align-items:center;gap:12px;min-width:300px';
+ c.innerHTML=`<div style="flex:1"><b>${esc(name||'Guest')}</b><div class="muted" style="font-size:13px">wants to join</div></div><button class="btn sm" data-a="no">Deny</button><button class="btn sm primary" data-a="yes">Let in</button>`;
+ c.querySelector('[data-a=yes]').onclick=()=>{c.remove();R.ok.add(id);if(!R.peers.has(id)){makePeer(id,name);toast((name||'Guest')+' joined')}send('hey',{to:id,host:true});sendMeta();renderPeople()};
+ c.querySelector('[data-a=no]').onclick=()=>{c.remove();send('deny',{to:id})};box.appendChild(c);try{const o=ac().createOscillator(),g=ac().createGain();o.frequency.value=880;g.gain.value=.08;o.connect(g).connect(ac().destination);o.start();o.stop(ac().currentTime+.15)}catch(e){}}
+function admitted(){if(R.admitted)return;R.admitted=true;$('#waitBox')?.remove()}
+function showWaiting(){if(R.host||R.admitted||$('#waitBox'))return;const w=document.createElement('div');w.id='waitBox';w.style.cssText='position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:20;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:22px 28px;text-align:center;font-size:17px;font-weight:700';w.innerHTML='Waiting for the host to let you in…';$('#stageArea').appendChild(w)}
 function dropPeer(id){const p=R.peers.get(id);if(!p)return;R.peers.delete(id);try{p.pc.close()}catch(e){}[...R.tiles.values()].filter(t=>t.peer===id).forEach(t=>removeTile(t.key));renderPeople()}
 
 /* tiles */
@@ -1344,7 +1359,7 @@ function openBrand(){let m=$('#mBrand');if(!m){m=document.createElement('div');m
 
 /* ================= leave ================= */
 async function leaveRoom(silent){if(!R.on)return;phoneHang();if(PH.device){try{PH.device.destroy()}catch(e){}PH.device=null}$('#ring').hidden=true;if(R.rec)await stopRecording();if(R.live)stopLive();if(R.guestRec)guestRecState(false);
- if(R.host)send('end');send('bye');R.caps=false;try{SR&&SR.abort()}catch(e){}SR=null;
+ if(R.host)send('end');send('bye');$('#admitBox')?.remove();$('#waitBox')?.remove();R.caps=false;try{SR&&SR.abort()}catch(e){}SR=null;
  R.peers.forEach(p=>{try{p.pc.close()}catch(e){}});R.peers.clear();[...R.tiles.keys()].forEach(removeTile);
  if(R.ch){try{await R.ch.unsubscribe()}catch(e){}R.ch=null}
  stopScreen();stopStream(R.local);PV.stream=null;R.local=null;clearInterval(R.tick);PG.stop();R.on=false;$('#room').hidden=true;$('#capBar').hidden=true;$('#ltBody').innerHTML='<p class="muted" id="ltEmpty" style="margin:0;font-size:13.5px">Turn on Captions to see what everyone says here.</p>';$('#sp-tx').innerHTML='<div class="empty" id="txEmpty">'+ico('cc')+'<b>No captions yet</b><span>Turn on Captions in the bar below.</span></div>';
