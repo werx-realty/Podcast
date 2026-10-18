@@ -429,6 +429,7 @@ body.is-guest #dCaps,body.is-guest #capBar,body.is-guest #sideTabs [data-t="tx"]
                 <label class="field"><span>Video quality</span><select class="in" id="qSel"><option value="1080">1080p Full HD</option><option value="720">720p HD</option></select></label>
                 <label class="switch"><input type="checkbox" id="nsTog"><i></i> Noise suppression</label>
                 <label class="switch"><input type="checkbox" id="ecTog"><i></i> Echo cancellation</label>
+                <label style="display:block;margin-top:10px;font-size:13.5px">Recording lip sync: <b id="syncV"></b> <span class="muted">(raise it if the voice comes before the lips)</span><input type="range" id="syncR" min="0" max="400" step="10" style="width:100%"></label>
               </div>
             </details>
             <div class="row">
@@ -996,6 +997,7 @@ async function startPreview(vEl,mEl,offEl){PV.vEl=vEl;PV.mEl=mEl;PV.offEl=offEl;
  try{PV.stream=await navigator.mediaDevices.getUserMedia(constraints())}catch(e){
    if(e.name==='OverconstrainedError'||e.name==='NotFoundError'){S.av.cam='';S.av.mic='';try{PV.stream=await navigator.mediaDevices.getUserMedia(constraints())}catch(e2){}}
    if(!PV.stream){try{PV.stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true}});toast('No camera found, using your mic only.')}catch(e3){showChecks(e.name==='NotAllowedError'?'Camera and mic are blocked. Click the camera icon in the address bar and choose Allow, then reload.':'Could not open your camera or mic: '+e.message);return}}}
+ {const at=PV.stream.getAudioTracks()[0];if(at&&!S.av.mic&&/airpods|bluetooth|hands-?free|headset|beats/i.test(at.label)){try{const ds=await navigator.mediaDevices.enumerateDevices();const alt=ds.find(d=>d.kind==='audioinput'&&d.deviceId!=='default'&&d.deviceId!=='communications'&&!/airpods|bluetooth|hands-?free|headset|beats/i.test(d.label));if(alt){S.av.mic=alt.deviceId;saveS();stopStream(PV.stream);PV.stream=await navigator.mediaDevices.getUserMedia(constraints());toast('Using '+alt.label+' for your mic. AirPods mics sound like a tunnel and add delay.')}}catch(e){}}}
  vEl.srcObject=PV.stream;applyPvToggles();PV.stopMeter=makeMeter(PV.stream,v=>{mEl.style.width=(v*100)+'%'});await fillDevices();showChecks()}
 function stopPreview(){if(R.on)return;if(PV.stopMeter)PV.stopMeter();stopStream(PV.stream);PV.stream=null;if(PV.vEl)PV.vEl.srcObject=null}
 function applyPvToggles(){if(!PV.stream)return;PV.stream.getAudioTracks().forEach(t=>t.enabled=PV.mic);PV.stream.getVideoTracks().forEach(t=>t.enabled=PV.cam);const noVid=!PV.stream.getVideoTracks().length;if(PV.offEl)PV.offEl.hidden=PV.cam&&!noVid;
@@ -1019,8 +1021,8 @@ async function enterRoom({host,room,title,name}){
  if(!PV.stream){toast('Turn on your camera or mic first.','err');return}
  R.ok=new Set();R.okList=[];R.hostId=null;R.admitted=!!host;R.on=true;R.host=host;R.room=room;R.title=title;R.name=name;R.local=PV.stream;R.mic=PV.mic;R.cam=PV.cam;R.joinedAt=Date.now();
  if(PV.stopMeter){PV.stopMeter();PV.stopMeter=null}
- const c=ac();R.mix=c.createMediaStreamDestination();
- if(R.local.getAudioTracks().length){const s=c.createMediaStreamSource(R.local);s.connect(R.mix);R.localSrc=s}
+ const c=ac();R.mix=c.createMediaStreamDestination();R.mixIn=c.createDelay(1);R.mixIn.delayTime.value=(S.av.sync??120)/1000;R.mixIn.connect(R.mixIn||R.mix);
+ if(R.local.getAudioTracks().length){const s=c.createMediaStreamSource(R.local);s.connect(R.mixIn||R.mix);R.localSrc=s}
  document.body.classList.toggle('is-guest',!host);$$('.host-only').forEach(el=>el.hidden=!host);
  $('#room').hidden=false;$('#roomTitle').textContent=title||S.show.title;
  addTile('me',R.local,name,'cam',{mine:true});
@@ -1048,7 +1050,7 @@ function makePeer(id,name){
  if(PH.stream)PH.stream.getAudioTracks().forEach(t=>{p.senders.phone=pc.addTrack(t,PH.stream)});
  pc.onnegotiationneeded=async()=>{try{p.makingOffer=true;await pc.setLocalDescription();send('sig',{to:id,desc:pc.localDescription.toJSON()})}catch(e){console.warn(e)}finally{p.makingOffer=false}};
  pc.onicecandidate=e=>{if(e.candidate)send('sig',{to:id,cand:e.candidate.toJSON()})};
- pc.ontrack=e=>{try{e.receiver.jitterBufferTarget=e.track.kind==='video'?0:40}catch(_){}try{if(e.track.kind==='video')e.receiver.playoutDelayHint=0}catch(_){}const s=e.streams[0]||new MediaStream([e.track]);let t=R.tiles.get(s.id);
+ pc.ontrack=e=>{try{if(e.track.kind==='video')e.receiver.jitterBufferTarget=0}catch(_){}try{if(e.track.kind==='video')e.receiver.playoutDelayHint=0}catch(_){}const s=e.streams[0]||new MediaStream([e.track]);let t=R.tiles.get(s.id);
    if(!t){const isScr=p.meta.screen===s.id,isPh=p.meta.phone===s.id;t=addTile(s.id,s,isPh?(p.meta.phoneName||'Phone guest'):isScr?p.name+"'s screen":p.name,isScr?'screen':'cam',{peer:id,phone:isPh})}
    else{t.video.srcObject=null;t.video.srcObject=s;t.video.play().catch(()=>{})}
    if(e.track.kind==='audio')hookAudio(t,e.track);
@@ -1108,7 +1110,7 @@ function addTile(key,stream,label,kind,{mine=false,peer=null,muted=false,phone=f
  if(R.rec)setTimeout(()=>recTile(t),mine?0:1500);
  positionTiles();renderPeople();return t}
 document.addEventListener('click',()=>{if(!R.on)return;R.tiles.forEach(t=>{if(!t.mine&&t.video.paused)t.video.play().catch(()=>{})});if(_ac&&_ac.state==='suspended')_ac.resume()});
-function hookAudio(t,track){if(t.audioHooked)return;t.audioHooked=true;try{const c=ac();const ms=new MediaStream([track]);const src=c.createMediaStreamSource(ms);src.connect(R.mix);t.mixSrc=src;t.stopMeter=makeMeter(ms,l=>t.level=l)}catch(e){console.warn(e)}}
+function hookAudio(t,track){if(t.audioHooked)return;t.audioHooked=true;try{const c=ac();const ms=new MediaStream([track]);const src=c.createMediaStreamSource(ms);src.connect(R.mixIn||R.mix);t.mixSrc=src;t.stopMeter=makeMeter(ms,l=>t.level=l)}catch(e){console.warn(e)}}
 function removeTile(key){const t=R.tiles.get(key);if(!t)return;if(t.stopMeter)t.stopMeter();try{t.mixSrc&&t.mixSrc.disconnect()}catch(e){}if(t.rec&&t.rec.state!=='inactive')try{t.rec.stop()}catch(e){}t.el.remove();R.tiles.delete(key);if(R.pin===key)R.pin=null;if(t.kind==='screen'&&R.layout==='screen'&&![...R.tiles.values()].some(x=>x.kind==='screen'))setLayout('side');positionTiles();renderPeople()}
 function tileOrder(){const a=[...R.tiles.values()];return[...a.filter(t=>t.kind==='cam'&&t.mine),...a.filter(t=>t.kind==='cam'&&!t.mine),...a.filter(t=>t.kind==='screen')]}
 function effLayout(){const hasScr=[...R.tiles.values()].some(t=>t.kind==='screen');if(R.layout==='screen'&&!hasScr)return'side';return R.layout}
@@ -1158,7 +1160,7 @@ async function toggleScreen(){if(R.screen){stopScreen();return}
  try{const s=await navigator.mediaDevices.getDisplayMedia({video:{frameRate:{ideal:30},width:{ideal:1920},height:{ideal:1080}},audio:true,selfBrowserSurface:'exclude',surfaceSwitching:'include'});
    R.screen=s;const vt=s.getVideoTracks()[0];if(vt&&'contentHint' in vt)vt.contentHint='detail';vt.onended=stopScreen;
    addTile('me-screen',s,R.name+"'s screen",'screen',{mine:true});
-   if(s.getAudioTracks().length){const src=ac().createMediaStreamSource(s);src.connect(R.mix);R.screenSrc=src}
+   if(s.getAudioTracks().length){const src=ac().createMediaStreamSource(s);src.connect(R.mixIn||R.mix);R.screenSrc=src}
    R.peers.forEach(p=>s.getTracks().forEach(t=>{p.senders['screen-'+t.kind]=p.pc.addTrack(t,s)}));
    setLayout('screen');sendMeta();updateDock()}catch(e){if(e.name!=='NotAllowedError')toast('Screen share did not start: '+e.message,'err')}}
 function stopScreen(){if(!R.screen)return;const s=R.screen;R.screen=null;R.peers.forEach(p=>{['screen-video','screen-audio'].forEach(k=>{if(p.senders[k]){try{p.pc.removeTrack(p.senders[k])}catch(e){}delete p.senders[k]}})});try{R.screenSrc&&R.screenSrc.disconnect()}catch(e){}stopStream(s);removeTile('me-screen');if(R.layout==='screen')setLayout('side');sendMeta();updateDock()}
@@ -1688,7 +1690,7 @@ function wire(){
  $('#myName').value=S.name;$('#myName').oninput=e=>{S.name=e.target.value;saveS()};
  $('#pvMic').onclick=()=>{PV.mic=!PV.mic;applyPvToggles()};$('#pvCam').onclick=()=>{PV.cam=!PV.cam;applyPvToggles()};
  $('#qSel').value=S.av.q;$('#qSel').onchange=e=>{S.av.q=e.target.value;saveS();startPreview($('#pvVideo'),$('#pvMeter'),$('#pvOff'))};
- $('#nsTog').checked=S.av.ns;$('#ecTog').checked=S.av.ec;$('#nsTog').onchange=e=>{S.av.ns=e.target.checked;saveS();startPreview($('#pvVideo'),$('#pvMeter'),$('#pvOff'))};$('#ecTog').onchange=e=>{S.av.ec=e.target.checked;saveS();startPreview($('#pvVideo'),$('#pvMeter'),$('#pvOff'))};
+ $('#syncR').value=S.av.sync??120;$('#syncV').textContent=(S.av.sync??120)+' ms';$('#syncR').oninput=e=>{S.av.sync=+e.target.value;$('#syncV').textContent=S.av.sync+' ms';saveS();if(R.mixIn)R.mixIn.delayTime.value=S.av.sync/1000};$('#nsTog').checked=S.av.ns;$('#ecTog').checked=S.av.ec;$('#nsTog').onchange=e=>{S.av.ns=e.target.checked;saveS();startPreview($('#pvVideo'),$('#pvMeter'),$('#pvOff'))};$('#ecTog').onchange=e=>{S.av.ec=e.target.checked;saveS();startPreview($('#pvVideo'),$('#pvMeter'),$('#pvOff'))};
  $$('.camSel').forEach(s=>s.onchange=e=>{S.av.cam=e.target.value;saveS();isGuest?startPreview($('#gVideo'),$('#gMeter'),$('#gOff')):startPreview($('#pvVideo'),$('#pvMeter'),$('#pvOff'))});
  $$('.micSel').forEach(s=>s.onchange=e=>{S.av.mic=e.target.value;saveS();isGuest?startPreview($('#gVideo'),$('#gMeter'),$('#gOff')):startPreview($('#pvVideo'),$('#pvMeter'),$('#pvOff'))});
  $('#startSess').onclick=()=>{const name=$('#myName').value.trim()||'Host';S.name=name;saveS();enterRoom({host:true,room:nextRoomId(),title:$('#sessTitle').value.trim()||'Session '+new Date().toLocaleDateString([],{month:'short',day:'numeric'}),name})};
