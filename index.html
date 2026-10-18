@@ -1,5 +1,5 @@
 <!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
-<title>HUBZE Studio</title>
+<title>HUBZE Studio</title><meta http-equiv="Cache-Control" content="no-cache">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,400;0,500;0,700;1,400&family=Montserrat:wght@400;500;600;700;800&family=Poppins:wght@400;600;700&family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=Lora:wght@400;700&family=Oswald:wght@400;600&family=Bebas+Neue&family=Anton&family=Great+Vibes&family=Archivo+Black&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
@@ -183,7 +183,7 @@ button,input,select,textarea{font:inherit;color:inherit}
 .dtab.add{padding:0 14px;font-size:18px;color:var(--muted)}
 .dtx{background:none;border:0;color:inherit;opacity:.6;cursor:pointer;font-size:15px;width:20px;height:20px;border-radius:4px;padding:0}
 .dtx:hover{opacity:1;background:var(--bg3)}
-#inlineEdit{position:absolute;background:transparent;border:0;outline:none;resize:none;overflow:hidden;padding:0;margin:0;white-space:pre-wrap;word-wrap:break-word;transform-origin:center;z-index:5}
+#inlineEdit{cursor:text;position:absolute;background:transparent;border:0;outline:none;resize:none;overflow:hidden;padding:0;margin:0;white-space:pre-wrap;word-wrap:break-word;transform-origin:center;z-index:5}
 #rbbar{position:absolute;top:46px;left:50%;transform:translateX(-50%);z-index:7;display:flex;gap:10px;align-items:center;background:var(--bg1);border:1px solid var(--line);border-radius:8px;padding:6px 6px 6px 12px;box-shadow:0 6px 20px rgba(0,0,0,.4);max-width:calc(100% - 24px);flex-wrap:wrap;white-space:nowrap}#rbbar .rtsz input[type=range]{width:80px}#rbInfo{color:var(--muted);font-size:12px;max-width:300px;white-space:normal}#rbbar .sep{width:1px;align-self:stretch;background:var(--line)}
 #rtbar{position:absolute;top:46px;left:50%;transform:translateX(-50%);z-index:7;display:flex;gap:10px;align-items:center;background:var(--bg1);border:1px solid var(--line);border-radius:8px;padding:6px 6px 6px 12px;box-shadow:0 6px 20px rgba(0,0,0,.4);max-width:calc(100% - 24px)}
 #rtInfo{color:var(--muted);font-size:12px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -1688,6 +1688,7 @@ cv.addEventListener('pointermove',e=>{
   if(tool==='retouch'){rtHover=[x,y];cv.style.cursor='crosshair';draw();return}
   if(isBrushT()){bHover=[x,y];cv.style.cursor='none';draw();return}
   if(tool==='rbg'){rbHover=[x,y];cv.style.cursor=rbBrush?'crosshair':'default';draw();return}
+  if(tool==='text'){const ot=[...objs].reverse().find(o=>o.type==='text'&&o.visible&&!o.locked&&hit(o,x,y));cv.style.cursor=ot?'text':'crosshair';return}
   if(tool!=='move'){cv.style.cursor='crosshair';return}
   const one=sel.length===1&&getObj(sel[0]);const hd=one&&!one.locked&&handleAt(one,x,y);
   if(hd){cv.style.cursor=hd.rot?'grab':CUR[hd.d.join(',')];return}{const rz=one&&!one.locked&&rotZone(one,x,y);if(rz){cv.style.cursor=rotCursor(rz.deg);return}}
@@ -2747,10 +2748,14 @@ $$('.modal').forEach(m=>m.addEventListener('click',e=>{if(e.target===m||e.target
 
 /* ---------- autosave ---------- */
 function safeSet(k,v){try{localStorage.setItem(k,v);return true}catch{}try{const d=JSON.parse(localStorage.getItem('afs:doc')||'null');if(d){d.uploads=[];localStorage.setItem('afs:doc',JSON.stringify(d))}localStorage.setItem(k,v);return true}catch{}try{localStorage.removeItem('afs:doc');localStorage.setItem(k,v);scheduleSave();return true}catch{return false}}
+const IDB=(()=>{let p;const db=()=>p||(p=new Promise((res,rej)=>{const r=indexedDB.open('hubze-studio',1);r.onupgradeneeded=()=>r.result.createObjectStore('kv');r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)}));
+ return{put:(k,v)=>db().then(d=>new Promise((res,rej)=>{const t=d.transaction('kv','readwrite');t.objectStore('kv').put(v,k);t.oncomplete=res;t.onerror=()=>rej(t.error)})),get:k=>db().then(d=>new Promise((res,rej)=>{const r=d.transaction('kv').objectStore('kv').get(k);r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)}))}})();
+let saveStamp=0;function saveNow(){try{snapTab();const allO=tabs.flatMap(t=>t.objs);saveStamp=Date.now();const full={t:saveStamp,doc,objs,cur:curTab,tabs:tabs.map(t=>({doc:t.doc,objs:t.objs})),images:usedImages(allO),uploads:uploads.filter(k=>images[k]).map(k=>[k,images[k]])};return IDB.put('doc',full).catch(()=>{})}catch(e){}}
 let saveT;function scheduleSave(){clearTimeout(saveT);saveT=setTimeout(()=>{snapTab();const allO=tabs.flatMap(t=>t.objs);const base={doc,objs,cur:curTab,tabs:tabs.map(t=>({doc:t.doc,objs:t.objs})),images:usedImages(allO)},ups=uploads.filter(k=>images[k]).slice(0,12).map(k=>[k,images[k]]);
  const tries=[{...base,uploads:ups},{...base,uploads:ups.slice(0,4)},{...base,uploads:[]}];let ok=false;
- for(const t of tries){try{localStorage.setItem('afs:doc',JSON.stringify(t));ok=true;break}catch{}}
- $('#stSave').textContent=ok?'Autosaved':'Autosave off: photos too big for browser storage. Use Save ▾ › Project file.'},700)}
+ saveNow();for(const t of tries){try{localStorage.setItem('afs:doc',JSON.stringify({...t,t:saveStamp}));ok=true;break}catch{}}
+ $('#stSave').textContent='Autosaved'},500)}
+addEventListener('visibilitychange',()=>{if(document.hidden)saveNow()});addEventListener('pagehide',()=>saveNow());addEventListener('blur',()=>saveNow());
 function fixUid(){objs.forEach(o=>{const n=parseInt(String(o.id).slice(1));if(n>=uid)uid=n+1})}
 
 /* ---------- misc ---------- */
@@ -3505,6 +3510,9 @@ try{const s=JSON.parse(localStorage.getItem('afs:doc')||'null');if(s&&s.doc&&s.o
 if(!loaded){const t=TEMPLATES[0];doc={name:t.name,w:t.w,h:t.h,bg:'#ffffff'};objs=t.build()}
 if(!Array.isArray(doc.groups))doc.groups=autoGroup(objs);
 if(!tabs.length)tabs=[{doc,objs,undoS:[],redoS:[],sel:[],view:null}];
+let lsStamp=0;try{lsStamp=(JSON.parse(localStorage.getItem('afs:doc')||'null')||{}).t||0}catch{}
+IDB.get('doc').then(s=>{if(!s||!s.doc||!s.objs||!(s.t>lsStamp)||saveStamp>s.t)return;Object.assign(images,s.images||{});(s.uploads||[]).forEach(([k,v])=>{images[k]=v;if(!uploads.includes(k))uploads.push(k)});
+ const ts=Array.isArray(s.tabs)&&s.tabs.length?s.tabs:[{doc:s.doc,objs:s.objs}];tabs=ts.map(t=>({doc:t.doc,objs:t.objs,undoS:[],redoS:[],sel:[],view:null}));tabs.forEach(t=>{objs=t.objs;fixUid();if(!Array.isArray(t.doc.groups))t.doc.groups=autoGroup(t.objs)});useTab(clamp(s.cur||0,0,tabs.length-1));try{renderUploads()}catch{}renderAll()}).catch(()=>{});
 collapsed=new Set(allCats());
 syncDocUI();renderElements();renderSections();renderTemplates();renderUploads();
 requestAnimationFrame(()=>{resize();fit();renderAll()});
